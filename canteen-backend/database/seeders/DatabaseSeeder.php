@@ -23,6 +23,7 @@ class DatabaseSeeder extends Seeder
             'address' => 'Admin Address',
             'contact' => 'Admin Contact',
             'username' => 'admin',
+            'hasStore' => false,
             'role' => 'admin',
             'email' => 'admin@example.com',
             'password' => Hash::make('password123')

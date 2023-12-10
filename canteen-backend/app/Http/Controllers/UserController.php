@@ -6,7 +6,7 @@ use App\Models\User;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Facades\Auth; 
-
+use Illuminate\Routing\Controller;
 class UserController extends Controller
 {
     public function login(Request $request)
@@ -18,23 +18,105 @@ class UserController extends Controller
             $field => $loginField,
             'password' => $password,
         ];
+    
         if (Auth::attempt($credentials)) {
             $user = auth()->user();
             $tokenResult = $user->createToken('auth-token');
             $token = $tokenResult->accessToken;
+           
             return response()->json([
-                'user' => $user, 
-                'accessToken' => $token], 200);
+                'user' => $user,
+                'accessToken' => $token,
+            ], 200);
+        } else {
+            // Check specific errors
+            $errorMessage = 'Username or password is incorrect.';
+            $errorCode = 'INVALID_CREDENTIALS';
+    
+            if (!User::where($field, $loginField)->exists()) {
+                $errorMessage = ucfirst($field) . ' not found';
+                $errorCode = 'USER_NOT_FOUND';
+            } elseif (!User::where($field, $loginField)->where('password', bcrypt($password))->exists()) {
+                $errorMessage = 'Username or password is incorrect.';
+                $errorCode = 'INCORRECT_PASSWORD';
+            }
+    
+            return response()->json([
+                'error' => [
+                    'description' => 'Invalid Credentials',
+                    'errorCode' => $errorCode,
+                    'message' => $errorMessage
+                ]
+            ], 200);
         }
-        return response()->json(['message' => 'Invalid credentials'], 401);
     }
+
+
+//     public function login(Request $request)
+// {
+//     $loginField = $request->input('login');
+//     $password = $request->input('password');
+//     $field = filter_var($loginField, FILTER_VALIDATE_EMAIL) ? 'email' : 'username';
+//     $credentials = [
+//         $field => $loginField,
+//         'password' => $password,
+//     ];
+
+//     if (Auth::attempt($credentials)) {
+//         $user = auth()->user();
+//         $tokenResult = $user->createToken('auth-token', ['*']);
+//         $token = $tokenResult->accessToken;
+
+//         // Retrieve the refresh token from the database
+//         $refreshToken = RefreshToken::where('access_token_id', $tokenResult->token->id)->first();
+
+//         // Check if refresh token is found
+//         if ($refreshToken) {
+//             // Use the 'CreateFreshApiToken' middleware to generate a new access token
+//             // $request->session()->regenerate();
+//             $request->headers->set('Authorization', 'Bearer ' . $token);
+
+//             return response()->json([
+//                 'user' => $user,
+//                 'accessToken' => $token,
+//                 'refreshToken' => $refreshToken->id,
+//             ], 200);
+//         } else {
+//             // Handle the case where refresh token is not found
+//             return response()->json([
+//                 'error' => [
+//                     'description' => 'Refresh token not found',
+//                     'errorCode' => 'REFRESH_TOKEN_NOT_FOUND',
+//                     'message' => 'Unable to retrieve refresh token.'
+//                 ]
+//             ], 500);
+//         }
+//     } else {
+//         // Handle invalid credentials
+//         return response()->json([
+//             'error' => [
+//                 'description' => 'Invalid Credentials',
+//                 'errorCode' => 'INVALID_CREDENTIALS',
+//                 'message' => 'Username or password is incorrect.'
+//             ]
+//         ], 200);
+//     }
+// }
+    
+    
+    
+
    
-    public function self()
-    {
-        $user = User::find(auth()->user()->id);
-        // $token = $user->createToken('authToken')->accessToken;
-        return response(['user' => $user]);
-    }
+public function self()
+{
+    $user = User::with('store')->find(auth()->user()->id);
+
+    // Access the 'store' relationship data
+    $storeData = $user->store;
+    
+    // Return the response with user and store data
+    return response(['user' => $user]);
+}
    
    
     public function createUser(Request $request)
@@ -44,14 +126,14 @@ class UserController extends Controller
             'firstname' => 'required|string',
             'address' => 'required|string',
             'contact' => 'required|string',
-            'role' => 'required|in:user,admin,super_admin',
+            // 'role' => 'required|in:user,admin,super_admin',
             'username' => 'required|string',
             'email' => 'required|email|unique:users',
             'password' => 'required|string|min:6',
         ]);
 
         $userData = $request->only([
-            'lastname', 'firstname', 'address', 'contact', 'role', 'username', 'email', 'password'
+            'lastname', 'firstname', 'address', 'contact', 'username', 'email', 'password'
         ]);
 
         $userData['password'] = Hash::make($userData['password']);
@@ -61,25 +143,61 @@ class UserController extends Controller
         return response()->json(['message' => 'User created successfully', 'user' => $user]);
     }
 
-    public function updateUser(Request $request, $id)
+    // public function updateUser(Request $request)
+    // {
+    //     $user = Auth::user();
+    
+    //     $request->validate([
+    //         'lastname' => 'string',
+    //         'firstname' => 'string',
+    //         'address' => 'string',
+    //         // 'contact' => 'required|string',
+    //         'username' => 'string',
+    //         'email' => 'email|unique:users,email,' . $user->id,
+    //         'photo' => 'sometimes|nullable|image|mimes:jpeg,png,jpg,gif,svg|max:2048',
+    //     ]);
+    
+    //     $user->update($request->only([
+    //         'lastname', 'firstname', 'address', 'contact', 'username', 'email', 'photo',
+    //     ]));
+    
+       
+    //     if ($request->hasFile('photo')) {
+    //         $file = $request->file('photo');
+    //         $fileName = time() . '.' . $file->getClientOriginalExtension();
+    //         $file->move(public_path('uploads'), $fileName);
+    
+    //         // Update the user's photo field in the database
+    //         $user->photo = $fileName;
+    //     }
+    //     $user->save();
+    //     return response()->json(['message' => 'User updated successfully', 'user' => $user]);
+    // }
+
+    public function updateUser(Request $request)
     {
-        $user = User::findOrFail($id);
+        $user = Auth::user();
 
-        $request->validate([
-            'lastname' => 'required|string',
-            'firstname' => 'required|string',
-            'address' => 'required|string',
-            'contact' => 'required|string',
-            'username' => 'required|string',
-            'email' => 'required|email|unique:users,email,' . $id,
-        ]);
+        $data = User::find($user->id);
+        $requestData = $request->all();
 
-        $user->update($request->only([
-            'lastname', 'firstname', 'address', 'contact', 'username', 'email',
-        ]));
+        // Update user fields
+        $data->update(array_filter($requestData));
 
-        return response()->json(['message' => 'User updated successfully', 'user' => $user]);
+        // Handle photo upload if a file is provided
+        if ($request->hasFile('photo')) {
+            $file = $request->file('photo');
+            $fileName = time() . '.' . $file->getClientOriginalExtension();
+            $file->move(public_path('uploads'), $fileName);
+
+            // Update the user's photo field in the database
+            $data->photo = $fileName;
+            $data->save();
+        }
+
+        return response()->json(['message' => 'User updated successfully', 'user' => $data]);
     }
+    
     public function toggleActivation($id)
     {
         $user = User::findOrFail($id);

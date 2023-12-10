@@ -18,6 +18,7 @@ return new class extends Migration
             $table->string('lastname');
             $table->string('firstname');
             $table->string('address');
+            $table->string('photo')->nullable();
             $table->string('contact');
             $table->enum('role', 
                 [
@@ -26,6 +27,8 @@ return new class extends Migration
                     'super_admin'
                 ])->default('user');
             $table->string('username');
+            $table->boolean('hasStore')->default(false);
+            $table->string('store_photo')->nullable();
             $table->boolean('is_active')->default(false);
             $table->string('email')->unique();
             $table->timestamp('email_verified_at')->nullable();
